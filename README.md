@@ -16,9 +16,11 @@ A cross-platform command-line tool for seamless interaction with GPT APIs direct
 
 ### PyPI
 
-    ```bash
-    python -m pip install --upgrade cmd_gpt
-    ```
+```bash
+python -m pip install --upgrade cmd_gpt
+```
+
+*currently unavailable due to a name collision*
 
 ### Manually
 
