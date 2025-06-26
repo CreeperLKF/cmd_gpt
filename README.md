@@ -1,6 +1,6 @@
-# cmd_gpt
+# cmd_gpt_utils
 
-A cross-platform command-line tool for seamless interaction with GPT APIs directly from your terminal.
+Command GPT Utilities, a cross-platform command-line tool for seamless interaction with GPT APIs directly from your terminal.
 
 ## Features
 
@@ -17,18 +17,18 @@ A cross-platform command-line tool for seamless interaction with GPT APIs direct
 ### PyPI
 
 ```bash
-python -m pip install --upgrade cmd_gpt
+python -m pip install --upgrade cmd_gpt_utils
+# Recommend `pipx` for global installation 
+cmd-gpt Hello World
 ```
-
-*currently unavailable due to a name collision*
 
 ### Manually
 
 1.  **Clone the repository and install the package:**
 
     ```bash
-    git clone https://github.com/CreeperLKF/cmd_gpt.git
-    cd cmd_gpt
+    git clone https://github.com/CreeperLKF/cmd_gpt_utils.git
+    cd cmd_gpt_utils
     pip install .
     ```
 
@@ -163,5 +163,5 @@ pytest
 You can also generate a code coverage report:
 
 ```bash
-pytest --cov=cmd_gpt
+pytest --cov=cmd_gpt_utils
 ```

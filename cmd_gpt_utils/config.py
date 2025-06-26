@@ -46,7 +46,7 @@ class ConfigLoader:
     def initialize_default_configs(self):
         conf_path = os.path.join(self.config_dir, "default.conf")
         if not os.path.exists(conf_path):
-            conf_template = """# This is the default configuration file for cmd_gpt.
+            conf_template = """# This is the default configuration file for cmd_gpt_utils.
 # You can copy this file to 'default.local' to override settings safely.
 
 # --- File Paths ---
@@ -95,7 +95,7 @@ class ConfigLoader:
 
         yaml_path = os.path.join(self.config_dir, "models.yaml")
         if not os.path.exists(yaml_path):
-            yaml_template = """# This file configures the models available to cmd_gpt.
+            yaml_template = """# This file configures the models available to cmd_gpt_utils.
 # You can define multiple model profiles here.
 
 models:

@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from cmd_gpt.processing import PromptBuilder
+from cmd_gpt_utils.processing import PromptBuilder
 
 def test_prompt_builder_basic():
     # Mock args and config

@@ -1,6 +1,6 @@
 import pytest
 import io
-from cmd_gpt.app import CmdGptApp
+from cmd_gpt_utils.app import CmdGptApp
 
 @pytest.fixture
 def mock_app_config(tmp_path, monkeypatch, mock_server):

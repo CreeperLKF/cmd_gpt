@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "cmd_gpt"
+name = "cmd_gpt_utils"
 version = "0.1.0"
 authors = [
   { name="LinearKF", email="creeper_lkf@qq.com" },
@@ -25,7 +25,7 @@ dependencies = [
 ]
 
 [project.scripts]
-cmd-gpt = "cmd_gpt.__main__:main"
+cmd-gpt = "cmd_gpt_utils.__main__:main"
 
 [project.optional-dependencies]
 test = [
