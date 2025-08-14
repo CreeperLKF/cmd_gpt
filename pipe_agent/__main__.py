@@ -1,7 +1,7 @@
-from .app import CmdGptApp
+from .app import PipeAgentApp
 
 def main():
-    app = CmdGptApp()
+    app = PipeAgentApp()
     app.run()
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
-from cmd_gpt.api import ApiClient
-from cmd_gpt.config import Model
+from pipe_agent.api import ApiClient
+from pipe_agent.config import Model
 
 def test_api_client_non_stream(mock_server):
     model = Model(

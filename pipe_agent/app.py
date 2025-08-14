@@ -5,9 +5,9 @@ from .config import ConfigLoader
 from .models import ModelSelector
 from .api import ApiClient
 from .processing import ContextManager, CotProcessor, PromptBuilder
-from .exceptions import CmdGptError
+from .exceptions import PipeAgentError
 
-class CmdGptApp:
+class PipeAgentApp:
     def run(self):
         try:
             parser = build_parser()
@@ -23,20 +23,21 @@ class CmdGptApp:
             model = model_selector.select(args.model_identifier)
 
             if model.openai_api_key == "sk-YOUR_API_KEY_HERE":
-                raise CmdGptError(
+                raise PipeAgentError(
                     f"API key for model '{model.model_name}' is a placeholder. "
                     f"Please edit your model configuration file at: {config.model_yaml_path}"
                 )
 
             # --- Step 1 & 2: Collect and build main prompt from parts ---
             main_prompt_parts = []
-            if args.prompt_file:
-                with open(args.prompt_file, 'r') as f:
-                    main_prompt_parts.append(f.read())
             
             if args.prompt:
                 positional_separator = " " if config.prompt_concat_sp else ""
                 main_prompt_parts.append(positional_separator.join(args.prompt))
+                
+            if args.prompt_file:
+                with open(args.prompt_file, 'r') as f:
+                    main_prompt_parts.append(f.read())
 
             nl_separator = "\n" if config.prompt_concat_nl else ""
             main_prompt_content = nl_separator.join(main_prompt_parts)
@@ -46,12 +47,19 @@ class CmdGptApp:
             history_json = ""
             if not sys.stdin.isatty():
                 if args.context_mode and 'i' in args.context_mode:
-                    history_json = sys.stdin.read() # History always reads the whole file
-                elif not main_prompt_content:
+                    history_json = sys.stdin.read()  # History always reads the whole file
+                else:
+                    stdin_content = ""
                     if read_single_line:
-                        main_prompt_content = sys.stdin.readline().strip()
+                        stdin_content = sys.stdin.readline().strip()
                     else:
-                        main_prompt_content = sys.stdin.read()
+                        stdin_content = sys.stdin.read()
+                    
+                    if stdin_content:
+                        if main_prompt_content:
+                            main_prompt_content += nl_separator + stdin_content
+                        else:
+                            main_prompt_content = stdin_content
             
             if not main_prompt_content and sys.stdin.isatty():
                 prompt_message = "Enter prompt (Press Enter to send):" if read_single_line else "Enter prompt (Ctrl+D to send):"
@@ -63,7 +71,7 @@ class CmdGptApp:
 
             # --- Step 4: Validation ---
             if not main_prompt_content:
-                 raise CmdGptError("Prompt cannot be empty.")
+                 raise PipeAgentError("Prompt cannot be empty.")
 
             # Build the final prompt
             prompt_builder = PromptBuilder(config, args)
@@ -116,7 +124,7 @@ class CmdGptApp:
                 # For modes that don't output history JSON, add a final newline.
                 print()
 
-        except CmdGptError as e:
+        except PipeAgentError as e:
             print(f"Error: {e}", file=sys.stderr)
             sys.exit(1)
         except KeyboardInterrupt:

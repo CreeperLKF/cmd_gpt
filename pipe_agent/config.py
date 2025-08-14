@@ -39,14 +39,14 @@ class Config:
 class ConfigLoader:
     def __init__(self, config_dir: Optional[str] = None):
         self.config_dir = os.path.expanduser(
-            config_dir or os.getenv("CMDGPT_CONFIG_PATH", "~/.config/cmd_gpt")
+            config_dir or os.getenv("PIPE_AGENT_CONFIG_PATH", "~/.config/pipe-agent")
         )
         os.makedirs(self.config_dir, exist_ok=True)
 
     def initialize_default_configs(self):
         conf_path = os.path.join(self.config_dir, "default.conf")
         if not os.path.exists(conf_path):
-            conf_template = """# This is the default configuration file for cmd_gpt_utils.
+            conf_template = """# This is the default configuration file for pipe-agent.
 # You can copy this file to 'default.local' to override settings safely.
 
 # --- File Paths ---
@@ -95,7 +95,7 @@ class ConfigLoader:
 
         yaml_path = os.path.join(self.config_dir, "models.yaml")
         if not os.path.exists(yaml_path):
-            yaml_template = """# This file configures the models available to cmd_gpt_utils.
+            yaml_template = """# This file configures the models available to pipe-agent.
 # You can define multiple model profiles here.
 
 models:

@@ -1,12 +1,12 @@
 import pytest
 import io
-from cmd_gpt_utils.app import CmdGptApp
+from pipe_agent.app import PipeAgentApp
 
 @pytest.fixture
 def mock_app_config(tmp_path, monkeypatch, mock_server):
     config_dir = tmp_path / "config"
     config_dir.mkdir()
-    monkeypatch.setenv("CMDGPT_CONFIG_PATH", str(config_dir))
+    monkeypatch.setenv("PIPE_AGENT_CONFIG_PATH", str(config_dir))
 
     # Create models.yaml pointing to the mock server
     models_yaml = config_dir / "models.yaml"
@@ -23,9 +23,9 @@ models:
 
 def test_app_e2e_basic_query(mock_app_config, monkeypatch, capsys):
     # Simulate command line arguments
-    monkeypatch.setattr("sys.argv", ["cmd-gpt", "Hello?"])
+    monkeypatch.setattr("sys.argv", ["pipe-agent", "Hello?"])
     
-    CmdGptApp().run()
+    PipeAgentApp().run()
     
     captured = capsys.readouterr()
     # The mock server repeats the question.
@@ -39,9 +39,9 @@ def test_app_e2e_stdin_query(mock_app_config, monkeypatch, capsys):
     
     # Simulate piped stdin using io.StringIO
     monkeypatch.setattr("sys.stdin", io.StringIO(input_content))
-    monkeypatch.setattr("sys.argv", ["cmd-gpt"])
+    monkeypatch.setattr("sys.argv", ["pipe-agent"])
     
-    CmdGptApp().run()
+    PipeAgentApp().run()
 
     captured = capsys.readouterr()
     print(f"Captured Error: {captured.err}")
@@ -51,9 +51,9 @@ def test_app_e2e_stdin_query(mock_app_config, monkeypatch, capsys):
 
 def test_app_e2e_stream_query(mock_app_config, monkeypatch, capsys):
     # Simulate command line arguments
-    monkeypatch.setattr("sys.argv", ["cmd-gpt", "-sse", "true", "Hello world. This is a test.中文测试。日本語テスト。"])
+    monkeypatch.setattr("sys.argv", ["pipe-agent", "-sse", "true", "Hello world. This is a test.中文测试。日本語テスト。"])
     
-    CmdGptApp().run()
+    PipeAgentApp().run()
     
     captured = capsys.readouterr()
     # The mock server repeats the question, and app adds a newline.
