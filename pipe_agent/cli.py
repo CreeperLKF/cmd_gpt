@@ -50,6 +50,7 @@ class ProviderCompleter:
         suggestions = []
         # Suggest unique provider names first
         unique_providers = sorted(list(set(p for _, p in get_model_provider_tuples(self.config_loader))))
+        print(unique_providers)
         if len(parts) == 1:
             for provider in unique_providers:
                 if provider.startswith(provider_prefix):
@@ -85,7 +86,7 @@ def build_parser() -> argparse.ArgumentParser:
         '-M', '--model-provider',
         dest='model_provider_identifier',
         help="Specify model by `provider[@model]`. Matches name or alias."
-    ) #.completer = ProviderCompleter(config_loader) # type: ignore
+    ).completer = ProviderCompleter(config_loader) # type: ignore
 
     parser.add_argument(
         '-p', '--prompt-file',
