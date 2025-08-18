@@ -1,13 +1,79 @@
 import sys
 import json
+from typing import Optional, List
+
 from .cli import build_parser
-from .config import ConfigLoader
-from .models import ModelSelector
+from .config import ConfigLoader, Config, Model
 from .api import ApiClient
 from .processing import ContextManager, CotProcessor, PromptBuilder
-from .exceptions import PipeAgentError
+from .exceptions import PipeAgentError, ConfigError
 
 class PipeAgentApp:
+
+    def _select_model(self, config: Config, model_identifier: Optional[str], model_provider_identifier: Optional[str]) -> Model:
+        if model_identifier and model_provider_identifier:
+            raise ConfigError("Cannot use -m and -M at the same time.")
+
+        # --- User-specified model ---
+        if model_identifier:
+            parts = model_identifier.split('@')
+            model_name = parts[0].lower()
+            provider_name = parts[1].lower() if len(parts) > 1 else None
+            
+            candidates = []
+            for m in config.models:
+                # Match name or alias
+                is_model_match = m.model_name.lower() == model_name or model_name in [a.lower() for a in m.model_alias]
+                if is_model_match:
+                    if provider_name is None or m.provider_name.lower() == provider_name:
+                        candidates.append(m)
+            
+            if not candidates:
+                raise ConfigError(f"Model '{model_identifier}' not found.")
+            if len(candidates) > 1 and provider_name is None:
+                providers = [c.provider_name for c in candidates]
+                raise ConfigError(
+                    f"Model name '{model_name}' is ambiguous. "
+                    f"Please specify a provider: {', '.join(providers)}"
+                )
+            return candidates[0]
+
+        if model_provider_identifier:
+            parts = model_provider_identifier.split('@')
+            provider_name = parts[0].lower()
+            model_name = parts[1].lower() if len(parts) > 1 else None
+
+            # This case is less common, so a simple loop is fine.
+            # In a real-world scenario with many models, you might pre-process into a dict.
+            for m in config.models:
+                is_provider_match = m.provider_name.lower() == provider_name
+                is_model_match = m.model_name.lower() == model_name or model_name in [a.lower() for a in m.model_alias]
+                if is_provider_match and is_model_match:
+                    return m
+            raise ConfigError(f"Model '{model_provider_identifier}' not found.")
+
+        # --- Default model from metrics ---
+        default_metric = config.model_registry.metrics.get('default')
+        if not default_metric:
+            raise ConfigError("No 'default' metric found in models.yaml to select a default model.")
+            
+        # Levels are assumed to be sorted by preference (e.g., higher is better)
+        for level in default_metric:
+            for model_ref in level.models:
+                # Find the first model in the list that is actually configured
+                ref_parts = model_ref.split('@')
+                ref_model_name = ref_parts[0]
+                ref_provider_name = ref_parts[1] if len(ref_parts) > 1 else None
+
+                for m in config.models:
+                    is_model_match = m.model_name == ref_model_name or ref_model_name in m.model_alias
+                    is_provider_match = ref_provider_name is None or m.provider_name == ref_provider_name
+                    if is_model_match and is_provider_match:
+                        return m # Return the first valid model found based on metric order
+        
+        raise ConfigError("No valid default model could be found from the 'default' metric in models.yaml.")
+
+
     def run(self):
         try:
             parser = build_parser()
@@ -19,13 +85,12 @@ class PipeAgentApp:
             config = config_loader.load(args.conf_files)
 
             # Select model
-            model_selector = ModelSelector(config.models)
-            model = model_selector.select(args.model_identifier)
+            model = self._select_model(config, args.model_identifier, args.model_provider_identifier)
 
-            if model.openai_api_key == "sk-YOUR_API_KEY_HERE":
+            if not model.api_key_config.keys or model.api_key_config.keys[0] == "sk-YOUR_API_KEY_HERE":
                 raise PipeAgentError(
                     f"API key for model '{model.model_name}' is a placeholder. "
-                    f"Please edit your model configuration file at: {config.model_yaml_path}"
+                    f"Please edit your provider configuration file for '{model.provider_name}'."
                 )
 
             # --- Step 1 & 2: Collect and build main prompt from parts ---

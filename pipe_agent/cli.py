@@ -5,33 +5,63 @@ import argcomplete
 from .config import ConfigLoader, Model
 from .exceptions import ConfigError
 
-class ModelIdCompleter:
+def get_model_provider_tuples(config_loader: ConfigLoader) -> List[tuple[str, str]]:
+    """Helper to load config and get (model_name, provider_name) tuples."""
+    try:
+        config = config_loader.load()
+        tuples = []
+        for m in config.models:
+            tuples.append((m.model_name, m.provider_name))
+            for alias in m.model_alias:
+                tuples.append((alias, m.provider_name))
+        return tuples
+    except ConfigError:
+        return []
+
+class ModelCompleter:
+    """Completes model[@provider]."""
     def __init__(self, config_loader: ConfigLoader):
         self.config_loader = config_loader
 
     def __call__(self, prefix: str, **kwargs: Any) -> List[str]:
-        try:
-            config = self.config_loader.load()
-            return [
-                str(m.id) for m in config.models 
-                if str(m.id).startswith(prefix)
-            ]
-        except ConfigError:
-            return []
+        parts = prefix.split('@')
+        model_prefix = parts[0]
+        provider_prefix = parts[1] if len(parts) > 1 else ''
+        
+        suggestions = []
+        for model, provider in get_model_provider_tuples(self.config_loader):
+            if model.startswith(model_prefix) and provider.startswith(provider_prefix):
+                if len(parts) > 1:
+                    suggestions.append(f"{model}@{provider}")
+                else:
+                    suggestions.append(model)
+        return suggestions
 
-class ModelNameCompleter:
+class ProviderCompleter:
+    """Completes provider[@model]."""
     def __init__(self, config_loader: ConfigLoader):
         self.config_loader = config_loader
 
     def __call__(self, prefix: str, **kwargs: Any) -> List[str]:
-        try:
-            config = self.config_loader.load()
-            return [
-                m.model_name for m in config.models 
-                if m.model_name and m.model_name.startswith(prefix)
-            ]
-        except ConfigError:
-            return []
+        parts = prefix.split('@')
+        provider_prefix = parts[0]
+        model_prefix = parts[1] if len(parts) > 1 else ''
+        
+        suggestions = []
+        # Suggest unique provider names first
+        unique_providers = sorted(list(set(p for _, p in get_model_provider_tuples(self.config_loader))))
+        if len(parts) == 1:
+            for provider in unique_providers:
+                if provider.startswith(provider_prefix):
+                    suggestions.append(provider)
+
+        # Then suggest full provider@model
+        for model, provider in get_model_provider_tuples(self.config_loader):
+            if provider.startswith(provider_prefix) and model.startswith(model_prefix):
+                suggestions.append(f"{provider}@{model}")
+        
+        return suggestions
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="A simple command-line tool for GPT interaction.")
@@ -45,15 +75,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Specify configuration files to load. Can be used multiple times. Overrides previous settings."
     )
     
-    model_completer = lambda prefix, parsed_args, **kwargs: (
-        list(ModelIdCompleter(config_loader)(prefix, **kwargs)) +
-        list(ModelNameCompleter(config_loader)(prefix, **kwargs))
-    )
     parser.add_argument(
         '-m', '--model', 
         dest='model_identifier',
-        help="Specify model by id or name prefix."
-    ).completer = model_completer # type: ignore
+        help="Specify model by `model[@provider]`. Matches name or alias."
+    ).completer = ModelCompleter(config_loader) # type: ignore
+
+    parser.add_argument(
+        '-M', '--model-provider',
+        dest='model_provider_identifier',
+        help="Specify model by `provider[@model]`. Matches name or alias."
+    ) #.completer = ProviderCompleter(config_loader) # type: ignore
 
     parser.add_argument(
         '-p', '--prompt-file',

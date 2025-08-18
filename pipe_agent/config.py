@@ -2,29 +2,51 @@ import os
 import yaml
 from dataclasses import dataclass, field
 from dotenv import load_dotenv
-from typing import Optional, List
+from typing import Optional, List, Dict, Any, Union
 
 from .exceptions import ConfigError
 
 @dataclass
+class ApiKeyConfig:
+    """Configuration for API key usage."""
+    keys: List[str] = field(default_factory=list)
+    mode: str = "sequential"  # "sequential" or "random"
+    max_retries: int = 1
+
+@dataclass
 class Model:
-    id: int
-    openai_api_key: str
+    """Represents a fully configured model, after merging provider and model-specific settings."""
+    # Identity
+    provider_name: str
+    model_id: str  # The identifier used in API calls (e.g., gpt-4-turbo)
+    model_name: str  # User-facing name for selection, defaults to model_id
+    model_alias: List[str]
+
+    # Provider Info
     api_base_url: str
-    model_tag: str
-    model_name: Optional[str] = None
+    api_key_config: ApiKeyConfig
+
+    # Behavior settings
     enable_sse: bool = True
     enable_cot: bool = False
     cot_tag: Optional[str] = None
     temperature: float = -1.0
 
-    def __post_init__(self):
-        if self.model_name is None:
-            self.model_name = self.model_tag
+@dataclass
+class MetricLevel:
+    """A level within a metric, containing models."""
+    level: Union[int, str]
+    models: List[str]
+    description: Optional[str] = None
+
+@dataclass
+class ModelRegistry:
+    """Structure of the main models.yaml file."""
+    enabled_providers: List[str] = field(default_factory=list)
+    metrics: Dict[str, List[MetricLevel]] = field(default_factory=dict)
 
 @dataclass
 class Config:
-    model_yaml_path: Optional[str] = None
     system_prompt: Optional[str] = None
     enable_cot: Optional[bool] = None
     cot_tag: Optional[str] = None
@@ -34,6 +56,9 @@ class Config:
     prompt_concat_nl: bool = True
     prompt_concat_sp: bool = True
     stop_at_newline: bool = False
+    
+    # New structured model configuration
+    model_registry: ModelRegistry = field(default_factory=ModelRegistry)
     models: List[Model] = field(default_factory=list)
 
 class ConfigLoader:
@@ -42,18 +67,13 @@ class ConfigLoader:
             config_dir or os.getenv("PIPE_AGENT_CONFIG_PATH", "~/.config/pipe-agent")
         )
         os.makedirs(self.config_dir, exist_ok=True)
+        os.makedirs(os.path.join(self.config_dir, "models"), exist_ok=True)
 
     def initialize_default_configs(self):
         conf_path = os.path.join(self.config_dir, "default.conf")
         if not os.path.exists(conf_path):
             conf_template = """# This is the default configuration file for pipe-agent.
 # You can copy this file to 'default.local' to override settings safely.
-
-# --- File Paths ---
-# MODEL_YAML: Path to the model configuration file.
-# It can be an absolute path or a path relative to the config directory.
-# Default: models.yaml
-# MODEL_YAML=models.yaml
 
 # --- Prompting ---
 # SYSTEM_PROMPT: A default system prompt to be used for all conversations.
@@ -93,49 +113,86 @@ class ConfigLoader:
             with open(conf_path, 'w') as f:
                 f.write(conf_template)
 
-        yaml_path = os.path.join(self.config_dir, "models.yaml")
-        if not os.path.exists(yaml_path):
-            yaml_template = """# This file configures the models available to pipe-agent.
-# You can define multiple model profiles here.
+        models_yaml_path = os.path.join(self.config_dir, "models.yaml")
+        if not os.path.exists(models_yaml_path):
+            models_yaml_template = """# This file configures model priorities and metrics.
+# It determines which model providers are active and how models are selected by default.
+
+providers:
+  # List of enabled provider configuration files (without the .yaml extension).
+  # The order determines the priority when a model is requested without a specific provider.
+  # The tool will look for files in the 'models/' subdirectory of your config folder.
+  # Example: 'OpenAI' corresponds to 'models/OpenAI.yaml'.
+  enabled:
+    - CONFIG_ME_BEFORE_USE
+    - OpenAI
 
 models:
-    - 
-        id: 1
-        # Your OpenAI API key. This is required.
-        openai_api_key: "sk-YOUR_API_KEY_HERE"
-        
-        # The base URL for the API.
-        api_base_url: "https://api.openai.com/v1/chat/completions"
-        
-        # The model identifier used in the API call (e.g., gpt-4-turbo).
-        model_tag: "gpt-4-turbo"
-        
-        # A friendly name for command-line selection (e.g., -m gpt4-turbo).
-        model_name: "gpt4-turbo"
-        
-        # Optional settings for this specific model.
-        # enable_sse: true
-        # enable_cot: false
-        # cot_tag: "thinking"
-        # temperature: 1.0
-    - 
-        id: 2
-        # It's recommended to use a different key for different providers or models.
-        openai_api_key: "sk-ANOTHER_API_KEY"
-        
-        # Example for a different provider.
-        api_base_url: "https://api.deepseek.com/chat/completions"
-        
-        model_tag: "deepseek-chat"
-        
-        model_name: "deepseek"
-        
-        # This model will have streaming disabled by default.
-        enable_sse: false
+  metrics:
+    # 'default' is the primary metric used for selecting a model when none is specified.
+    # It ranks models based on general capability.
+    default:
+      - level: 5
+        models:
+          # You can specify a model by its name/alias, or name@provider.
+          - Railgun
+          - gpt-3.5
+          - gpt-4@OpenAI
+    
+    # You can define custom metrics for specific needs.
+    # For example, ranking models by cost.
+    cost:
+      - level: 2
+        description: "Low cost models"
+        models:
+          - CONFIG_OR_REMOVE_ME
 """
-            with open(yaml_path, 'w') as f:
-                f.write(yaml_template)
+            with open(models_yaml_path, 'w') as f:
+                f.write(models_yaml_template)
 
+        # Create an example provider config if it doesn't exist
+        example_provider_path = os.path.join(self.config_dir, "models", "OpenAI.yaml")
+        if not os.path.exists(example_provider_path):
+            provider_template = """# This is an example configuration file for the 'OpenAI' provider.
+# File name (without .yaml) is used as the provider name.
+
+provider:
+  # The base URL for the API.
+  api_base_url: "https://api.openai.com/v1/chat/completions"
+
+  # API key configuration.
+  openai_api_key:
+    # A list of API keys. The tool will cycle through them based on the mode.
+    keys:
+      - "sk-YOUR_API_KEY_HERE"
+    
+    # 'sequential' or 'random'.
+    mode: "sequential"
+    
+    # Number of retries before failing. -1 for infinite (iterate through all keys).
+    max_retries: 1
+
+  # Default settings for all models from this provider.
+  # These can be overridden in the individual model configurations below.
+  defaults:
+    enable_sse: true
+    temperature: 1.0
+
+# A list of models offered by this provider.
+models:
+  - model_id: "gpt-4-turbo"
+    model_name: "gpt4-turbo" # A friendly name for CLI selection
+    model_alias: ["gpt4t"] # Optional aliases
+
+  - model_id: "gpt-3.5-turbo"
+    model_name: "gpt3.5-turbo"
+    model_alias: ["gpt35"]
+    # Override a default setting
+    enable_sse: false
+"""
+            with open(example_provider_path, 'w') as f:
+                f.write(provider_template)
+    
     def _find_valid_path(self, path: str) -> str:
         if os.path.isabs(path):
             if os.path.exists(path):
@@ -168,20 +225,58 @@ models:
                 found_path = self._find_valid_path(conf_file)
                 load_dotenv(found_path, override=True)
 
-        # 3. Resolve MODEL_YAML path
-        model_yaml_path_str = os.getenv("MODEL_YAML", "models.yaml")
-        model_yaml_path = self._find_valid_path(model_yaml_path_str)
+        # 3. Load model registry and provider configurations
+        models_yaml_path = os.path.join(self.config_dir, "models.yaml")
+        if not os.path.exists(models_yaml_path):
+            raise ConfigError("models.yaml not found. Please run the application once to generate default configs.")
 
-        with open(model_yaml_path, 'r') as f:
-            models_data = yaml.safe_load(f)
+        with open(models_yaml_path, 'r') as f:
+            registry_data = yaml.safe_load(f)
+        
+        registry = ModelRegistry(
+            enabled_providers=registry_data.get('providers', {}).get('enabled', []),
+            metrics={k: [MetricLevel(**level) for level in v] for k, v in registry_data.get('models', {}).get('metrics', {}).items()}
+        )
 
-        if not models_data or 'models' not in models_data:
-            raise ConfigError(f"No 'models' section found in {model_yaml_path}")
+        all_models = []
+        for provider_name in registry.enabled_providers:
+            provider_conf_path = os.path.join(self.config_dir, "models", f"{provider_name}.yaml")
+            if not os.path.exists(provider_conf_path):
+                # Consider warning the user
+                continue
             
-        models = [Model(**m) for m in models_data['models']]
-        models.sort(key=lambda m: m.id)
+            with open(provider_conf_path, 'r') as f:
+                provider_data = yaml.safe_load(f)
 
-        # 4. Populate Config object from environment
+            provider_section = provider_data.get('provider', {})
+            api_key_data = provider_section.get('openai_api_key', {})
+            api_key_config = ApiKeyConfig(
+                keys=api_key_data.get('keys', []),
+                mode=api_key_data.get('mode', 'sequential'),
+                max_retries=api_key_data.get('max_retries', 1)
+            )
+
+            provider_defaults = provider_section.get('defaults', {})
+
+            for model_data in provider_data.get('models', []):
+                # Merge provider defaults with model-specific settings
+                model_settings = {**provider_defaults, **model_data}
+                
+                model = Model(
+                    provider_name=provider_name,
+                    model_id=model_settings.get('model_id'),
+                    model_name=model_settings.get('model_name', model_settings.get('model_id')),
+                    model_alias=model_settings.get('model_alias', []),
+                    api_base_url=provider_section.get('api_base_url'),
+                    api_key_config=api_key_config,
+                    enable_sse=model_settings.get('enable_sse', True),
+                    enable_cot=model_settings.get('enable_cot', False),
+                    cot_tag=model_settings.get('cot_tag'),
+                    temperature=model_settings.get('temperature', -1.0)
+                )
+                all_models.append(model)
+
+        # 4. Populate Config object from environment for non-model settings
         enable_cot_str = os.getenv("ENABLE_COT", "default").lower()
         enable_cot = None
         if enable_cot_str == 'true':
@@ -201,7 +296,6 @@ models:
         stop_at_newline = os.getenv("STOP_AT_NEWLINE", "false").lower() == 'true'
 
         return Config(
-            model_yaml_path=model_yaml_path,
             system_prompt=os.getenv("SYSTEM_PROMPT"),
             enable_cot=enable_cot,
             cot_tag=os.getenv("COT_TAG"),
@@ -211,5 +305,6 @@ models:
             prompt_concat_nl=prompt_concat_nl,
             prompt_concat_sp=prompt_concat_sp,
             stop_at_newline=stop_at_newline,
-            models=models,
+            model_registry=registry,
+            models=all_models,
         )
